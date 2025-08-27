@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tidregistrering</title>
+  <style>
+    :root { --fg:#111; --muted:#666; --bd:#e5e5e5; --card:#fff; --shadow:0 1px 6px rgba(0,0,0,.06); }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:var(--fg); background:#fafafa; }
+    main { max-width: 980px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { display:flex; gap:.5rem; align-items:center; font-size: 2rem; margin: 0 0 .5rem; }
+    h2 { margin: 0 0 .75rem; }
+    .muted { color: var(--muted); }
+    .card { background:var(--card); border:1px solid var(--bd); border-radius: 14px; padding: 1rem; box-shadow: var(--shadow); margin: 1rem 0; }
+    input, select, button, textarea { font-size: 1rem; padding: .6rem .8rem; border-radius: 10px; border: 1px solid #ccc; background:#fff; }
+    button { cursor: pointer; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .row { display: grid; grid-template-columns: repeat(6, 1fr); gap: .75rem; align-items: start; }
+    .row > * { min-width: 0; }
+    label { font-size: .9rem; color: #444; display: block; margin-bottom: .25rem; }
+    textarea { resize: vertical; }
+    table { width: 100%; border-collapse: collapse; background:#fff; }
+    th, td { padding: .6rem .5rem; border-bottom: 1px solid #eee; text-align: left; }
+    tfoot td { font-weight: 600; }
+    .right { text-align: right; }
+    .note { grid-column: 1 / -1; }
+    .toolbar { display:flex; gap:.5rem; align-items:center; margin-bottom:.5rem; flex-wrap: wrap; }
+    .spacer { flex:1; }
+    .hint { font-size:.92rem; margin:.25rem 0 0; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>🕒 Tidregistrering</h1>
+  <p class="muted">Registrér din tid pr. projekt og se ugens total. Åbn pgAdmin → Query Tool → <code>LISTEN time_entries_changes;</code> for live-notifikationer.</p>
+
+  <section class="card" id="formCard">
+    <h2>Ny registrering</h2>
+    <div class="row">
+      <div>
+        <label for="work_date">Dato</label>
+        <input id="work_date" type="date" placeholder="yyyy-mm-dd">
+      </div>
+      <div>
+        <label for="project">Projekt</label>
+        <select id="project"></select>
+      </div>
+      <div>
+        <label for="start_time">Start</label>
+        <input id="start_time" type="time" value="08:00">
+      </div>
+      <div>
+        <label for="end_time">Slut</label>
+        <input id="end_time" type="time" value="16:00">
+      </div>
+      <div>
+        <label for="break_minutes">Pause (min)</label>
+        <input id="break_minutes" type="number" min="0" step="5" value="30">
+      </div>
+      <div class="note">
+        <label for="note">Note</label>
+        <textarea id="note" rows="2" placeholder="Valgfri note..."></textarea>
+      </div>
+    </div>
+    <div class="hint muted">Tip: Nattevagt? Vælg fx Start <b>22:00</b> og Slut <b>06:00</b> – systemet tæller over midnat.</div>
+    <div style="margin-top: .75rem;">
+      <button id="saveBtn" type="button">Gem registrering</button>
+      <span id="msg" class="muted" style="margin-left:.5rem;"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Oversigt</h2>
+    <div class="toolbar">
+      <label for="from">Fra</label>
+      <input id="from" type="date" placeholder="yyyy-mm-dd">
+      <label for="to">Til</label>
+      <input id="to" type="date" placeholder="yyyy-mm-dd">
+      <button id="filterBtn" type="button">Hent</button>
+      <button id="csvBtn"  type="button" title="Download CSV">CSV</button>
+      <button id="xlsxBtn" type="button" title="Download Excel">Excel</button>
+      <span class="spacer"></span>
+      <span id="totalLabel" class="muted"></span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Dato</th>
+          <th>Projekt</th>
+          <th>Start</th>
+          <th>Slut</th>
+          <th class="right">Pause</th>
+          <th class="right">Timer</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+      <tfoot>
+        <tr>
+          <td colspan="5" class="right">Total</td>
+          <td class="right" id="totalHours">0.0</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </section>
+</main>
+
+<script>
+  // ---------- Helpers ----------
+  function fmtDateOnly(s) {
+    if (!s) return '';
+    if (typeof s === 'string') return s.slice(0,10);   // "YYYY-MM-DD..." -> "YYYY-MM-DD"
+    try { return new Date(s).toISOString().slice(0,10); } catch { return String(s); }
+  }
+  function fmtHours(mins) { return (Number(mins)/60).toFixed(1).replace('.', ','); }
+  function toISODate(d){
+    const date = (d instanceof Date) ? d : new Date(d);
+    const z = new Date(date.getTime() - date.getTimezoneOffset()*60000);
+    return z.toISOString().slice(0,10);
+  }
+  function mondayOfWeek(d) {
+    const dt = (d instanceof Date) ? new Date(d) : new Date(String(d));
+    const day = (dt.getDay()+6)%7; // 0=Mon
+    dt.setDate(dt.getDate()-day);
+    return toISODate(dt);
+  }
+  function sundayOfWeek(d) {
+    const dt = (d instanceof Date) ? new Date(d) : new Date(String(d));
+    const day = (dt.getDay()+6)%7;
+    dt.setDate(dt.getDate()+(6-day));
+    return toISODate(dt);
+  }
+  function getDateValue(id) {
+    const el = document.getElementById(id);
+    if (el && el.valueAsDate instanceof Date) return toISODate(el.valueAsDate);
+    const v = (el && el.value) || '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;             // yyyy-mm-dd
+    const m = v.match(/^(\d{2})-(\d{2})-(\d{4})$/);          // dd-mm-yyyy
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return v;
+  }
+
+  // ---------- API calls ----------
+  async function loadProjects(){
+    try {
+      const res = await fetch('/api/projects');
+      const data = await res.json();
+      const sel = document.getElementById('project');
+      sel.innerHTML = '';
+
+      if (!Array.isArray(data) || data.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '— Ingen projekter —';
+        sel.appendChild(opt);
+        document.getElementById('saveBtn').disabled = true;
+        return;
+      }
+
+      for (const p of data) {
+        const opt = document.createElement('option');
+        opt.value = String(p.id);
+        opt.textContent = p.name;
+        sel.appendChild(opt);
+      }
+      sel.selectedIndex = 0;
+      document.getElementById('saveBtn').disabled = false;
+      document.getElementById('msg').textContent = '';
+    } catch (e) {
+      document.getElementById('msg').textContent = 'Kunne ikke hente projekter';
+      document.getElementById('saveBtn').disabled = true;
+    }
+  }
+
+  async function loadEntries(){
+    const from = getDateValue('from');
+    const to   = getDateValue('to');
+    const url  = new URL('/api/time-entries', window.location.origin);
+    if (from) url.searchParams.set('from', from);
+    if (to)   url.searchParams.set('to', to);
+
+    const res  = await fetch(url);
+    const list = await res.json();
+
+    const tbody = document.getElementById('tbody');
+    tbody.innerHTML = '';
+    let total = 0;
+
+    for (const r of list){
+      total += Number(r.duration_minutes || 0);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${fmtDateOnly(r.work_date)}</td>
+        <td>${r.project_name}</td>
+        <td>${String(r.start_time).slice(0,5)}</td>
+        <td>${String(r.end_time).slice(0,5)}</td>
+        <td class="right">${r.break_minutes}</td>
+        <td class="right">${fmtHours(r.duration_minutes)}</td>
+        <td>${r.note || ''}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+    document.getElementById('totalHours').textContent = fmtHours(total);
+    document.getElementById('totalLabel').textContent = `Ugens total: ${fmtHours(total)} t`;
+  }
+
+  async function saveEntry(){
+    const msg = document.getElementById('msg');
+    msg.textContent = '';
+
+    const sel = document.getElementById('project');
+    const val = (sel && sel.value) ? sel.value.trim() : '';
+    if (!val) { msg.textContent = 'Vælg et projekt'; return; }
+
+    const body = {
+      project_id: Number(val),
+      work_date: document.getElementById('work_date').value,
+      start_time: document.getElementById('start_time').value,
+      end_time: document.getElementById('end_time').value,
+      break_minutes: Number(document.getElementById('break_minutes').value || 0),
+      note: document.getElementById('note').value || null
+    };
+
+    const res = await fetch('/api/time-entries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (res.ok){
+      msg.textContent = 'Gemt!';
+      document.getElementById('note').value = '';
+      await loadEntries();
+    } else {
+      const j = await res.json().catch(()=>({}));
+      msg.textContent = j.error || 'Fejl';
+    }
+  }
+
+  function exportFile(kind) {
+    const from = getDateValue('from');
+    const to   = getDateValue('to');
+    const url  = new URL(`/api/export.${kind}`, window.location.origin);
+    if (from) url.searchParams.set('from', from);
+    if (to)   url.searchParams.set('to', to);
+    window.location.href = url.toString();
+  }
+
+  // ---------- Init ----------
+  document.addEventListener('DOMContentLoaded', () => {
+    const today = new Date();
+    document.getElementById('work_date').value = toISODate(today);
+    document.getElementById('from').value = mondayOfWeek(today);
+    document.getElementById('to').value   = sundayOfWeek(today);
+
+    const saveBtn = document.getElementById('saveBtn');
+    saveBtn.disabled = true;
+
+    document.getElementById('saveBtn').addEventListener('click', saveEntry);
+    document.getElementById('filterBtn').addEventListener('click', loadEntries);
+    const csvBtn  = document.getElementById('csvBtn');
+    if (csvBtn)  csvBtn.addEventListener('click', () => exportFile('csv'));
+    const xlsxBtn = document.getElementById('xlsxBtn');
+    if (xlsxBtn) xlsxBtn.addEventListener('click', () => exportFile('xlsx'));
+
+    loadProjects().then(loadEntries);
+
+    document.getElementById('project').addEventListener('change', () => {
+      document.getElementById('msg').textContent = '';
+    });
+  });
+</script>
+</body>
+</html>
