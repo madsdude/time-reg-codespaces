@@ -1,0 +1,14 @@
+{
+  "name": "time-reg-codespaces",
+  "version": "1.0.0",
+  "description": "Tidregistrering (Express + PostgreSQL + pgAdmin) med devcontainer/Codespaces",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "pg": "^8.12.0"
+  }
+}
