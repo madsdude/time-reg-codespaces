@@ -1,9 +1,10 @@
+
 <!doctype html>
 <html lang="da">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Tidregistrering v2.2</title>
+<title>Tidregistrering v2.3</title>
 <style>
   :root { --fg:#111; --muted:#666; --bd:#e8e8e8; --card:#fff; --shadow:0 2px 10px rgba(0,0,0,.06); }
   * { box-sizing: border-box; }
@@ -36,12 +37,14 @@
   .filters { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin-left:auto; }
   .filters label { margin: 0 .15rem 0 0; }
   .hidden { display:none; }
+  .btn-link { background:transparent; border:none; padding:.2rem .4rem; color:#c00; cursor:pointer; }
+  .btn-link:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
 <main>
   <h1>🕒 Tidregistrering</h1>
-  <p class="muted">Pause er fjernet. Vælg person, og registrér hele intervallet.</p>
+  <p class="muted">Ingen pause – varighed = hele intervallet. Vælg person, registrér tid, og brug fanerne nedenfor.</p>
 
   <section class="card" id="formCard">
     <h2>Ny registrering</h2>
@@ -87,11 +90,8 @@
         <input id="to" type="date" placeholder="yyyy-mm-dd" style="min-width:160px;">
         <button id="filterBtn" type="button">Hent</button>
 
-        <!-- eksport-knapper til liste (vises kun på Oversigt) -->
         <button id="csvBtn"  type="button" title="Download CSV (detaljer)">CSV</button>
         <button id="xlsxBtn" type="button" title="Download Excel (detaljer)">Excel</button>
-
-        <!-- ny: opsummerings-Excel (vises kun på Opsummering) -->
         <button id="xlsxSummaryBtn" type="button" class="hidden" title="Download Excel (opsummering)">Excel (opsum.)</button>
 
         <span id="totalLabel" class="muted"></span>
@@ -109,6 +109,7 @@
             <th>Slut</th>
             <th class="right">Timer</th>
             <th>Note</th>
+            <th>Slet</th>
           </tr>
         </thead>
         <tbody id="tbody"></tbody>
@@ -116,6 +117,7 @@
           <tr>
             <td colspan="4" class="right">Total</td>
             <td class="right" id="totalHours">0.0</td>
+            <td></td>
             <td></td>
           </tr>
         </tfoot>
@@ -147,6 +149,7 @@
   function mondayOfWeek(d){ const dt=(d instanceof Date)?new Date(d):new Date(String(d)); const day=(dt.getDay()+6)%7; dt.setDate(dt.getDate()-day); return toISODate(dt); }
   function sundayOfWeek(d){ const dt=(d instanceof Date)?new Date(d):new Date(String(d)); const day=(dt.getDay()+6)%7; dt.setDate(dt.getDate()+(6-day)); return toISODate(dt); }
   function getDateValue(id){ const el=document.getElementById(id); if(el&&el.valueAsDate instanceof Date) return toISODate(el.valueAsDate); const v=(el&&el.value)||''; if(/^\d{4}-\d{2}-\d{2}$/.test(v)) return v; const m=v.match(/^(\d{2})-(\d{2})-(\d{4})$/); if(m) return `${m[3]}-${m[2]}-${m[1]}`; return v; }
+  function selectedUserId(){ const v=(document.getElementById('user')?.value||'').trim(); return v?Number(v):null; }
 
   // API
   async function loadUsers(){
@@ -167,8 +170,11 @@
     const url=new URL('/api/time-entries', window.location.origin); if(from) url.searchParams.set('from',from); if(to) url.searchParams.set('to',to);
     const res=await fetch(url); const list=await res.json();
     const tbody=document.getElementById('tbody'); tbody.innerHTML=''; let total=0;
+    const myUserId = selectedUserId();
+
     for(const r of list){
       total+=Number(r.duration_minutes||0);
+      const canDelete = myUserId && Number(r.user_id) === Number(myUserId);
       const tr=document.createElement('tr');
       tr.innerHTML=`
         <td>${fmtDateOnly(r.work_date)}</td>
@@ -176,7 +182,9 @@
         <td>${String(r.start_time).slice(0,5)}</td>
         <td>${String(r.end_time).slice(0,5)}</td>
         <td class="right">${fmtHours(r.duration_minutes)}</td>
-        <td>${r.note||''}</td>`;
+        <td>${r.note||''}</td>
+        <td>${canDelete?`<button class="btn-link" data-id="${r.id}">Slet</button>`:''}</td>`;
+      if (canDelete) tr.querySelector('button[data-id]').addEventListener('click', () => deleteEntry(r.id));
       tbody.appendChild(tr);
     }
     document.getElementById('totalHours').textContent=fmtHours(total);
@@ -221,6 +229,15 @@
     }
   }
 
+  async function deleteEntry(id){
+    const uid = selectedUserId();
+    if (!uid) { alert('Vælg først en person i formularen.'); return; }
+    if (!confirm('Slet denne registrering?')) return;
+    const res = await fetch(`/api/time-entries/${id}?user_id=${uid}`, { method:'DELETE' });
+    if (res.status === 204) { await loadEntries(); }
+    else { const j = await res.json().catch(()=>({})); alert(j.error || 'Kunne ikke slette'); }
+  }
+
   function exportList(kind){
     const from=getDateValue('from'); const to=getDateValue('to');
     const url=new URL(`/api/export.${kind}`, window.location.origin);
@@ -235,14 +252,12 @@
     if(to)   url.searchParams.set('to',to);
     window.location.href=url.toString();
   }
-
   function setToolbarFor(tab){
     const showSummary = tab==='summary';
     document.getElementById('csvBtn').classList.toggle('hidden', showSummary);
     document.getElementById('xlsxBtn').classList.toggle('hidden', showSummary);
     document.getElementById('xlsxSummaryBtn').classList.toggle('hidden', !showSummary);
   }
-
   function showTab(which){
     const o=document.getElementById('panelOverview');
     const s=document.getElementById('panelSummary');
