@@ -46,3 +46,32 @@ Genstart Portainer hvis den hænger:
 ```bash
 docker restart portainer
 ```
+
+## 8. Tilføj en ny person
+
+Sådan tilføjer du en ny medarbejder i systemet:
+
+1. Gå til GitHub-repoet: `https://github.com/madsdude/time-reg-codespaces`
+2. Åbn filen **`server.js`** og klik **Edit this file**.
+3. Find listen:
+   ```js
+   const PEOPLE = [
+     'Andreas Boje',
+     // ...
+   ];
+   ```
+4. Tilføj navnet i **enkeltanførselstegn** og husk **komma** efter, fx:
+   ```js
+   const PEOPLE = [
+     'Andreas Boje',
+     'Ny Person',
+   ];
+   ```
+5. Scroll ned og klik **Commit changes**.
+
+**Udrul ændringen på serveren (Proxmox Docker-vært):**
+```bash
+cd ~/time-reg-codespaces
+git pull
+docker compose up -d --build
+```
