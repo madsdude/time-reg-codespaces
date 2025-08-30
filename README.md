@@ -1,71 +1,48 @@
-# Tidregistrering — Web + PostgreSQL + pgAdmin (klar til VS Code & Codespaces)
+# 🕒 Tidregistrering – Docker Guide
 
-En simpel tidregistreringsapp: opret registreringer pr. dag/projekt, se liste og ugens total. Kører i Docker, med devcontainer til VS Code og GitHub Codespaces.
+## 1. Forudsætninger
+- Docker og Docker Compose installeret  
+- Git installeret (`apt install -y git`)
 
-## Hurtig start (lokalt)
+## 2. Hent projektet
+```bash
+git clone https://github.com/madsdude/time-reg-codespaces.git
+cd time-reg-codespaces
+```
+
+## 3. Start containers
 ```bash
 docker compose up -d --build
 ```
-Åbn:
-- App: http://localhost:3000
-- pgAdmin: http://localhost:5050  (login: `admin@example.com` / `secret123`)
 
-**Live notifikationer i pgAdmin**
-1) pgAdmin → `Tools → Query Tool` på `appdb`
-2) Kør: `LISTEN time_entries_changes;`
-3) Åbn fanen **Notifications** for push-events ved nye/ændrede registreringer.
+Dette starter:
+- **web** → port `3000`  
+- **db** (PostgreSQL) → port `5432`  
+- **pgadmin** → port `5050`  
 
-## API
-- `GET /api/projects` — liste projekter
-- `GET /api/time-entries?from=YYYY-MM-DD&to=YYYY-MM-DD` — filtreret liste (valgfrit)
-- `POST /api/time-entries`
-  ```json
-  {
-    "user_id": 1,
-    "project_id": 1,
-    "work_date": "2025-08-27",
-    "start_time": "08:00",
-    "end_time": "16:00",
-    "break_minutes": 30,
-    "note": "Opsætning af miljø"
-  }
-  ```
+## 4. Tilgå systemet
+- App: `http://<serverens-IP>:3000`  
+- pgAdmin: `http://<serverens-IP>:5050`  
+  - Bruger: `admin@example.com`  
+  - Kode: `secret123`  
 
-## Useful
+## 5. Opdater kode
 ```bash
-docker compose ps
-docker compose logs -f web
-docker compose down          # stop (data bevares)
-docker compose down -v       # stop + slet data (init-scripts kører igen)
+cd ~/time-reg-codespaces
+git pull
+docker compose up -d --build
 ```
 
-## Struktur
-```text
-.
-├─ .devcontainer/
-│  └─ devcontainer.json
-├─ db/
-│  └─ init/
-│     ├─ 01_schema.sql
-│     └─ 02_notify_time_entries.sql
-├─ public/
-│  └─ index.html
-├─ .github/workflows/ci.yml
-├─ .gitignore
-├─ .env.example
-├─ docker-compose.yml
-├─ Dockerfile
-├─ package.json
-├─ server.js
-└─ README.md
+## 6. Nyttige kommandoer
+```bash
+docker compose ps          # se status
+docker compose logs -f web # se logs fra web
+docker compose down        # stoppe alt
 ```
 
-## Klar til GitHub
+## 7. Portainer (valgfrit)
+Tilgå på `http://<serverens-IP>:9000` (eller `https://<serverens-IP>:9443`)  
+Genstart Portainer hvis den hænger:  
 ```bash
-git init
-git add .
-git commit -m "Initial: Tidregistrering (web + db + pgAdmin + devcontainer + notify)"
-git branch -M main
-git remote add origin https://github.com/<brugernavn>/<repo>.git
-git push -u origin main
+docker restart portainer
 ```
