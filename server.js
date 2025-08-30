@@ -38,6 +38,7 @@ const PEOPLE = [
   'Mathias Schaldemose',
   'Michel Nielsen',
   'Natascha Løgstrup',
+  'Anna-Natascha Christensen',
   'Nicolai Bjerregaard',
   'Nicole-Nathalie',
   'Niels DM',
@@ -47,6 +48,7 @@ const PEOPLE = [
   'Simon Bødker',
   'Theresa Andersen',
   'Trine Munkholm',
+  'Ronja Pilgaard',
 ];
 
 async function initDb() {
