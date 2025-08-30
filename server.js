@@ -14,6 +14,7 @@ const pool = new Pool({ connectionString: DATABASE_URL });
 const PEOPLE = [
   'Andreas Boje',
   'Benjamin Fagerlund',
+  'Benjamin Borup',
   'Cathrine Christensen',
   'Cecilie Carstensen',
   'Cecilie Dalsgaard',
