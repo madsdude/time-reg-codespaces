@@ -41,7 +41,8 @@ const PEOPLE = [
   'Martin Laigaard',
   'Hartvig',
   'Claus DM',
-  'Kasper Petersen',   
+  'Kasper Petersen',
+  'Nikolaj DM',
 ];
 
 async function initDb() {
